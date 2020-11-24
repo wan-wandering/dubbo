@@ -520,23 +520,39 @@ public class DubboBootstrap extends GenericEventListener {
      * Initialize
      */
     public void initialize() {
+        //---CAS方法----乐观锁--需要复习一下悲观锁和乐观锁--
+        //java并发---AtomicBoolean的方法compareAndSet（仅执行一次）。
+        /* AtomicBoolean initialized  可用在应用程序中（如以原子方式更新的标志），但不能用于替换 Boolean。
+        即能够保证在高并发的情况下只有一个线程能够访问这个属性值
+        一般情况下，我们使用 AtomicBoolean 高效并发处理 “只初始化一次” 的功能要求*/
         if (!initialized.compareAndSet(false, true)) {
             return;
         }
-
+        //初始化框架的代码，这里是静态类，使用的是SPI的加载方式（可以了解一下Java Spi机制）
+        /*java spi：
+            按照双亲委派模型不能解决所有的类加载问题，
+            Java中定义了许多SPI（服务者提供接口，ServiceProviderInterface的缩写），
+            这些接口并未实现，由第三方进行实现，例如JDBC、JNDI等。
+            依据双亲委派模型，SPI的接口是Java核心库的一部分，
+            由BootStrapClassLoader加载的；
+            SPI实现的Java类一般是由AppClassLoader来加载。
+            Spring中有类似JDK的SPI机制，通过SpringFactoriesLoader代替JDK中的ServiceLoader，
+            通过META-INF/spring.factories文件代替META-INF/service目录下的描述文件
+        */
+        //初始化FrameworkExt类,遍历执行配置管理器,环境等的初始化方法
         ApplicationModel.initFrameworkExts();
-
+        //配置管理器读取并加载配置中心的配置信息,并准备环境,最后存入environment中
         startConfigCenter();
-
+        //加载远程配置
         loadRemoteConfigs();
-
+        //检查全局配置
         checkGlobalConfigs();
 
         // @since 2.7.8
         startMetadataCenter();
-
+        //初始化元数据服务,加载本地元数据服务提供者类
         initMetadataService();
-
+        //初始化事件监听器
         initEventListener();
 
         if (logger.isInfoEnabled()) {
@@ -888,21 +904,34 @@ public class DubboBootstrap extends GenericEventListener {
     public DubboBootstrap start() {
         if (started.compareAndSet(false, true)) {
             ready.set(false);
+            //0、初始化，比如启动配置中心、载入远程配置、检查全局配置、启动元数据中心、初始化元数据服务等等。。。。
             initialize();
             if (logger.isInfoEnabled()) {
                 logger.info(NAME + " is starting...");
             }
             // 1. export Dubbo Services
+            /**暴露dubbo服务提供者，最主要的是这个方法*/
+            /*
+                心态有点崩，简单来说
+                1.根据url调用 doLocalExport 导出服务
+                2.根据 register 的值决定是否注册服务
+                3.向注册中心进行订阅 override 数据
+            */
+            //暴露服务
             exportServices();
 
             // Not only provider register
+            // 不仅提供者注册
             if (!isOnlyRegisterProvider() || hasExportedServices()) {
                 // 2. export MetadataService
+                // 暴露元数据服务 如果不仅仅是服务提供者，那就发布元数据服务MetadataService
                 exportMetadataService();
                 //3. Register the local ServiceInstance if required
+                // 如果需要,注册本地服务实例
                 registerServiceInstance();
             }
-
+            //订阅服务
+            //4、引用服务，如果一个应用即是提供者也是消费者那么此处就需要服务消费，服务消费后面再进行详细分析。
             referServices();
             if (asyncExportingFutures.size() > 0) {
                 new Thread(() -> {
@@ -1074,20 +1103,34 @@ public class DubboBootstrap extends GenericEventListener {
     }
 
     private void exportServices() {
+        /**此方法最需要关注的是暴露服务发布方法：-----sc.export();------*/
+        /*从配置管理器中获取到需要发布的服务列表，然后循环进行每一个服务发布，dubbo的每一个配置
+        在触发完成后都会将其添加到configManager的configsCache的Map属性中，当然初始化的过程也是使用
+        spring的一些基础组件来实现的，因此我们能够在这里通过configManager获取到我们所需要发布的服务列
+        表，服务列表中都是使用一个ServiceConfigBase来进行封装的，ServiceConfigBase又继承了AbstractServiceConfig抽象类，因此也
+        就有了服务发布的功能。*/
+        //获取所有ServiceBean遍历调用export()  sc-->configManager.getServices()的list中的服务
         configManager.getServices().forEach(sc -> {
             // TODO, compatible with ServiceConfig.export()
+            //1、先将ServiceConfigBase实例强转成父类ServiceConfig,然后设置这个ServiceConfigBase的bootstrap属性为当前的Bootstrap实例。
             ServiceConfig serviceConfig = (ServiceConfig) sc;
             serviceConfig.setBootstrap(this);
-
+            //异步暴露服务
             if (exportAsync) {
+                /*线程池开启子线程异步执行暴露服务*/
+                //2、如果需要异步发布就获取一个服务发布线程池进行服务的异步发布。
                 ExecutorService executor = executorRepository.getServiceExporterExecutor();
+                /*获取线程结束后的执行状态、已有结果（跟踪线程已有信息），包装进asyncExportingFutures待使用*/
                 Future<?> future = executor.submit(() -> {
+                    //暴露服务
                     sc.export();
                     exportedServices.add(sc);
                 });
                 asyncExportingFutures.add(future);
             } else {
+                //3、同步进行服务发布。
                 sc.export();
+                //4、记录已经发布好的服务。
                 exportedServices.add(sc);
             }
         });

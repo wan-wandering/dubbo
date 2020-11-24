@@ -182,13 +182,16 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
     }
 
     public synchronized void export() {
+
+        /*1、如果当前ServiceBean的bootstrap 属性等于null，那就现场直接创建+初始化一个，一般此处
+        应该不会为空，因为在前面一步进行了设置。*/
         if (bootstrap == null) {
             bootstrap = DubboBootstrap.getInstance();
             bootstrap.initialize();
         }
-
+        //2、检查当前发布的服务的配置的子项是否正确。
         checkAndUpdateSubConfigs();
-
+        //3、设置当前发布的服务的元数据。
         //init serviceMetadata
         serviceMetadata.setVersion(getVersion());
         serviceMetadata.setGroup(getGroup());
@@ -202,11 +205,14 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
         }
 
         if (shouldDelay()) {
+            //4、如果配置了当前服务进行延迟发布的话，那就是用延迟发布线程池来进行延迟发布。
+            //DELAY_EXPORT_EXECUTOR延迟发布线程池，TimeUnit.MILLISECONDS 毫秒
             DELAY_EXPORT_EXECUTOR.schedule(this::doExport, getDelay(), TimeUnit.MILLISECONDS);
         } else {
+            /**5、正常发布服务。*/
             doExport();
         }
-
+        //6、发布当前服务完成后，进行一个处理，就是发布一个服务发布完成事件
         exported();
     }
 
@@ -292,10 +298,10 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
 
 
     protected synchronized void doExport() {
-        if (unexported) {
+        if (unexported) {//如果是已经解除暴露的接口则抛出异常
             throw new IllegalStateException("The service " + interfaceClass.getName() + " has already unexported!");
         }
-        if (exported) {
+        if (exported) {//如果已经暴露则不需要重复暴露
             return;
         }
         exported = true;
@@ -303,13 +309,54 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
         if (StringUtils.isEmpty(path)) {
             path = interfaceName;
         }
+        /**开始发布各种url*/
         doExportUrls();
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void doExportUrls() {
+        /*1、获取一个服务仓库，ServiceRepository的构造函数会默认添加回声测试服务EchoService +
+                泛化服务GenericService两个服务到当前的服务仓库中。
+                （基于spi机制实现的BuiltinServiceDetector里调用的Class<?> getService();有四个实现类：
+                    a、EchoServiceDetector
+                    b、GenericServiceDetector
+                    c、MetricsServiceDetector
+                    d、MonitorServiceDetector）*/
+        //补充知识点：
+        /**回声测试：
+            A、回声测试用于检测服务是否可用，回声测试按照正常请求流程执行，能够测试整个调用是否通畅，可用于监控。
+            B、所有服务自动实现EchoService接口，只需将任意服务强制转换为EchoService，即可调用。
+                （之前并不知道回声测试，但是每一个 Dubbo 接口都支持回声测试。这点从官网上的描述也可以看出来的：
+                所有服务自动实现 EchoService 接口，只需将任意服务引用强制转型为 EchoService，即可使用。润物无声，牛不牛皮，惊不惊讶？这波骚操作简直秀到我了。。）
+            C、用法非常简单。总体来看就是如果你只需要看看 Dubbo 服务能否调通，但你又不想用启动时检查的方式，你也不需要为每个服务都专门提供一个诸如 sayHello 这样的接口。
+            D、调用方只需要把其中的一个服务引用强转为 EchoService 就可以了。
+            E、EchoService 就是一个接口：
+            F、demoService 这个服务引用是一个动态代理的类。
+        那么小老弟，面试题就来了，请问 Dubbo 提供了哪些动态代理的实现方式？其默认实现是什么呢？
+        记住，只有 jdk 和 javassist 的实现方法，没有 CGLIB。其默认实现是 javassist。
+        */
+
+        /**泛化调用
+            当provider发布了某个接口A，但Consumer不知道这个接口A具体内容，但知道其中某个方法时，可采用泛化调用（但不推荐，影响透明化），跨越了消费端的代理对象
+            在消费端引用接口时开启
+            泛接口调用方式主要用于客户端没有API接口及模型类元的情况，参数及返回值中的所有POJO均用Map表示，通常用于框架集成，比如：实现一个通用的服务测试框架，可通过GenericService调用所有服务实现。
+         使用方式：
+         <dubbo:reference id="demoService" interface="com.foo.DemoService" generic="true"/>
+         */
+
+        /*
+        destory和echo 的实现差不多，只是拦截时机不同而已。
+        所以，其实这就是一种思想，基于动态代理我们可以搞很多事情，接口里面的方法，也不是非得实现，只要我们能拦截到这个方法就行。
+        关键是，你得分析清楚，在什么时机去拦截。
+        所以，我们能从 Dubbo 源码中学到的这个骚操作是在创建动态代理对象的时候，可以神不知鬼不觉的给代理对象加一个接口，而且不需要真正的去实现接口里面的方法，只需要拦截下来就行。
+        这个时候，再回想回想 Mybatis ，也是只有接口，没有实现类，也是通过动态代理的方式把接口和 SQL 关联起来的。
+        你就想，多联想，品一品这个味道。自己多咂摸咂摸。
+        */
+
         ServiceRepository repository = ApplicationModel.getServiceRepository();
+        /*2、注册当前所需发布的服务到服务仓库中。*/
         ServiceDescriptor serviceDescriptor = repository.registerService(getInterfaceClass());
+        /*3、注册当前提供者到服务仓库中。*/
         repository.registerProvider(
                 getUniqueServiceName(),
                 ref,
@@ -317,43 +364,55 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
                 this,
                 serviceMetadata
         );
-
+        /*4、获取服务注册与发现的服务URL列表，由于返回是一个集合，因此代表dubbo可支持多注册中
+            心。注意此处返回的URL实例是"registry"协议的，url样例：registry://127.0.0.1:8848/org.apache
+            .dubbo.registry.RegistryService?application=provider&dubbo=2.0.2&pid=16036&qos.enable
+              =false&registry=nacos&release=2.7.8&timestamp=1599662197066, 比如我们配置的是：
+            nacos://127.0.0.1:8848 经过处理后就是样例中的结果。（——zookeeper同样）
+         */
         List<URL> registryURLs = ConfigValidationUtils.loadRegistries(this, true);
-
+        //5、循环进行协议发布，这里是dubbo支持多协议的实现。
         for (ProtocolConfig protocolConfig : protocols) {
+            //构建一个pathKey，pathKey的格式：服务名称/group/version
             String pathKey = URL.buildKey(getContextPath(protocolConfig)
                     .map(p -> p + "/" + path)
                     .orElse(path), group, version);
             // In case user specified path, register service one more time to map it to path.
+            //注册解析好group+version的服务注册到服务仓库中。
             repository.registerService(pathKey, interfaceClass);
             // TODO, uncomment this line once service key is unified
+            //设置当前服务的元数据的服务key。
             serviceMetadata.setServiceKey(pathKey);
+            //发布当前协议的服务到服务的注册与发现中心。
             doExportUrlsFor1Protocol(protocolConfig, registryURLs);
         }
     }
-
+    //使用协议配置+注册中心地址列表来执行发布
     private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> registryURLs) {
+        //1、获取协议名称，如果没有配置默认会赋值为dubbo协议。
         String name = protocolConfig.getName();
         if (StringUtils.isEmpty(name)) {
             name = DUBBO;
         }
-
+        //2、创建一个Map用来添加参数，参数的意思就是服务的配置信息。
         Map<String, String> map = new HashMap<String, String>();
-        map.put(SIDE_KEY, PROVIDER_SIDE);
+        map.put(SIDE_KEY, PROVIDER_SIDE);//添加side=provide
 
-        ServiceConfig.appendRuntimeParameters(map);
-        AbstractConfig.appendParameters(map, getMetrics());
-        AbstractConfig.appendParameters(map, getApplication());
-        AbstractConfig.appendParameters(map, getModule());
+        ServiceConfig.appendRuntimeParameters(map);//添加运行的参数到map中，包含dubbo版本信息，当前服务的进程id,启动是时间信息。
+        AbstractConfig.appendParameters(map, getMetrics());//添加监控的配置到map中。
+        AbstractConfig.appendParameters(map, getApplication());//添加应用信息到map中。
+        AbstractConfig.appendParameters(map, getModule());//添加模块信息到map中。
         // remove 'default.' prefix for configs from ProviderConfig
         // appendParameters(map, provider, Constants.DEFAULT_KEY);
-        AbstractConfig.appendParameters(map, provider);
-        AbstractConfig.appendParameters(map, protocolConfig);
-        AbstractConfig.appendParameters(map, this);
-        MetadataReportConfig metadataReportConfig = getMetadataReportConfig();
+        AbstractConfig.appendParameters(map, provider);//添加提供者信息到map中。
+        AbstractConfig.appendParameters(map, protocolConfig);//添加协议信息到map中。
+        AbstractConfig.appendParameters(map, this);//将当前ServiceBean实例添加到map中。
+        MetadataReportConfig metadataReportConfig = getMetadataReportConfig();//添加mata元数据到map中
+        //如果配置了元数据存储服务地址的话就默认将添加"metadata-type"属性="remote"表示元数据存储在远程，不存储在本地。
         if (metadataReportConfig != null && metadataReportConfig.isValid()) {
             map.putIfAbsent(METADATA_KEY, REMOTE_METADATA_STORAGE_TYPE);
         }
+        //3、如果单独配置了方法，就做如下处理。
         if (CollectionUtils.isNotEmpty(getMethods())) {
             for (MethodConfig method : getMethods()) {
                 AbstractConfig.appendParameters(map, method, method.getName());
@@ -409,7 +468,7 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
                 }
             } // end of methods for
         }
-
+        //4、添加泛化配置到map中
         if (ProtocolUtils.isGeneric(generic)) {
             map.put(GENERIC_KEY, generic);
             map.put(METHODS_KEY, ANY_VALUE);
