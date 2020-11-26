@@ -1107,8 +1107,16 @@ public class DubboBootstrap extends GenericEventListener {
         /*从配置管理器中获取到需要发布的服务列表，然后循环进行每一个服务发布，dubbo的每一个配置
         在触发完成后都会将其添加到configManager的configsCache的Map属性中，当然初始化的过程也是使用
         spring的一些基础组件来实现的，因此我们能够在这里通过configManager获取到我们所需要发布的服务列
-        表，服务列表中都是使用一个ServiceConfigBase来进行封装的，ServiceConfigBase又继承了AbstractServiceConfig抽象类，因此也
+        表，服务列表中都是使用一个ServiceBean来进行封装的，ServiceBean又继承了ServiceConfig抽象类，因此也
         就有了服务发布的功能。*/
+        /*注意:本例中的provider是直接启用ServiceConfig类,跳过了ServiceBean:
+              ServiceConfig<DemoServiceImpl> service = new ServiceConfig<>();
+              service.setInterface(DemoService.class);
+              service.setRef(new DemoServiceImpl());
+         而在真正的调用中,服务暴露是由com.alibaba.dubbo.config.spring.ServiceBean这个类来实现的，
+         这个类是spring通过解析<dubbo:service>节点创建的单例Bean，每一个<dubbo:service>都会创建一个ServiceBean。
+         */
+
         //获取所有ServiceBean遍历调用export()  sc-->configManager.getServices()的list中的服务
         configManager.getServices().forEach(sc -> {
             // TODO, compatible with ServiceConfig.export()

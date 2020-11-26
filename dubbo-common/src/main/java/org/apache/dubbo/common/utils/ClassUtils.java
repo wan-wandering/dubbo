@@ -135,22 +135,69 @@ public class ClassUtils {
      * @param clazz
      * @return class loader
      */
+
+   /** 一、从Java 虚拟机的角度来讲，只存在两种不同的类加载器：一种是启动类加载器(Bootstrap ClassLoader），
+            它C＋＋语言实现，是虚拟机自身的一部分：另一种就是所有其他的类加载器，这些类加载器都出Java 语言实现，独立于虚拟机外部，
+            并且全都继承自抽象类java.lang.ClassLoader。
+    二、从发开人员的角度来看，类加载器有下面3种。
+            （一）、启动类加载器 (BootstrapClassLoader)：存放在<JAVA_HOM/lib>目录中的，或者被－Xbootclasspath 参数所指定的路径中的，并且是虚拟机识别的类库加载到虚拟机内存中（一般是java.lang下的类，和java.io下的类）。启动类加载器无法被Java 程序直接引用，用户在编写自定义类加载器时，如果需要把加载请求委派给引导类加载器，直接使用null 代替。
+            （二）、扩展类加载器（ExtensionClassloader）：由sun.misc.Launcher$ExtClassLoader 实现，负责加载＜JAVA_HOME>/lib/ext 目录中的，或者被java.ext.dirs 系统变量所指定的路径中的所有类库，开发者可以直接使用扩展类加器。
+            （三）、应用程序类加载器(ApplicationClassLoader)： 这个类加载器由sun.misc.Launcher$AppClassLoader 来实现． 由于这个类加载器是ClassLoader 中的getSystemClassLoader()方法的返回值，所以一般也称它为系统类加载器．负责加载用户类路径经（ ClassPath ）上所指定的类库，
+                    开发者可以直接使用这个类加载器，如果应用程序中没有自定义过自己的类加载器，就是程序中默认的类加载器。
+
+    三、双亲委派模型
+            类加载器之间的层次关系，称为类加载器的双亲委派模型（Parents Delegation Model）。除了顶层的启动类加载器外，其余的类加载器都有父类加载器．
+            工作过程是： 如果一个类加载器收到了类加载的请求，先不会自己去加载这个类，而是把这个请求委派给父类加载器去完成，每一个层次的类加载器都是如此，所有的加载请求最终都会传送到顶层的启动类加载器中，只有当父加器无法加载这个类时，子载加载器才自己去加载。
+
+    四、类加载器的三个特性
+            类加载器有三个特性，分别为委派，可见性和单一性，其他文章上对这三个特性的介绍如下：
+                * 委托机制是指将加载一个类的请求交给父类加载器，如果这个父类加载器不能够找到或者加载这个类，那么再加载它。
+                * 可见性的原理是子类的加载器可以看见所有的父类加载器加载的类，而父类加载器看不到子类加载器加载的类。
+                * 单一性原理是指仅加载一个类一次，这是由委托机制确保子类加载器不会再次加载父类加载器加载过的类。
+            其中，委派机制是基础，在其他资料中也把这种机制叫做类加载器的双亲委派模型，其实说的是同一个意思。可加性和单一性是依赖于委派机制的。
+
+    五、破坏双亲委派模型
+            第一次“被破坏”发生在双亲委派模型出现之前。亲委派模型在JDK 1.2 之后才被引入，类加载器和抽象类Java. lang. ClassLoader 则在JDK 1 .0 时代就已经存在，对已经存在的用户自定义类加载器的实现代码， Java 设计者们引入双亲委派模型时做出了一些妥协。
+    第二次“被破坏”是由这个模型自身的缺陷所导致的，双亲委派很好地解决了各个类加载器的基础类的统一问题（越基础的类由越上层的类加载器进行加载），
+        基础类之所以被称为“基础”，是因为它们总是作为被用户代码词用的API。但是基础类有时又要调用用户代码，如JNDI。
+    此时就引入了线程上下文类加器。
+            第三次“被破坏”是由于用户对程序动态性的追求而导致的。代码热替换（HotSwap）、模块热部署（Hot Deployment）等*/
     public static ClassLoader getClassLoader(Class<?> clazz) {
+        /*类的加载器有两种
+            1、Java虚拟机自带的加载器
+            2、 用户自定义类加载器
+        而Java虚拟机自带的加载器又包括3种类加载器
+            根类加载器（Bootstrap）
+            扩展类加载器（Extension）
+            系统类加载器（Ststem）
+        系统类加载器又称为应用类加载器
+        其中扩展类加载器和系统类加载器是使用Java实现的。而根加载器是使用C++实现的，JVM的API也没有暴露根类加载器，程序员无法在Java代码中获取根加载器。
+        用户自定义类加载器是用户自己写的类加载器，但是必须继承java.lang.ClassLoader这个类，用户可以自定义类的加载方式！
+        */
+
+        /*补充知识点：
+        而线程上下文类加载器破坏了“双亲委派模型”，可以在执行线程中抛弃双亲委派加载链模式，使程序可以逆向使用类加载器。
+　　     线程上下文类加载器（context class loader）是从 JDK 1.2 开始引入的。
+        类 java.lang.Thread中的方法 getContextClassLoader()和 setContextClassLoader(ClassLoader cl)用来获取和设置线程的上下文类加载器。
+        如果没有通过 setContextClassLoader(ClassLoader cl)方法进行设置的话，线程将继承其父线程的上下文类加载器。
+        Java 应用运行的初始线程的上下文类加载器是系统类加载器。在线程中运行的代码可以通过此类加载器来加载类和资源。
+        */
         ClassLoader cl = null;
-        try {
+        try {//线程上下文加载器
             cl = Thread.currentThread().getContextClassLoader();
         } catch (Throwable ex) {
             // Cannot access thread context ClassLoader - falling back to system class loader...
         }
-        if (cl == null) {
+        if (cl == null) {//自定义类加载器
             // No thread context class loader -> use class loader of this class.
             cl = clazz.getClassLoader();
             if (cl == null) {
                 // getClassLoader() returning null indicates the bootstrap ClassLoader
-                try {
+                try {//系统类加载器\applicationClassLoader
                     cl = ClassLoader.getSystemClassLoader();
                 } catch (Throwable ex) {
                     // Cannot access system ClassLoader - oh well, maybe the caller can live with null...
+                            /**for author:  I can't live with null! ---HanLei */
                 }
             }
         }

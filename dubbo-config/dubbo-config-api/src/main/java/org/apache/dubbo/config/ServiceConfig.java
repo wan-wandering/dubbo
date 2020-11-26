@@ -407,9 +407,9 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
         AbstractConfig.appendParameters(map, provider);//添加提供者信息到map中。
         AbstractConfig.appendParameters(map, protocolConfig);//添加协议信息到map中。
         AbstractConfig.appendParameters(map, this);//将当前ServiceBean实例添加到map中。
-        MetadataReportConfig metadataReportConfig = getMetadataReportConfig();//添加mata元数据到map中
+        MetadataReportConfig metadataReportConfig = getMetadataReportConfig();
         //如果配置了元数据存储服务地址的话就默认将添加"metadata-type"属性="remote"表示元数据存储在远程，不存储在本地。
-        if (metadataReportConfig != null && metadataReportConfig.isValid()) {
+        if (metadataReportConfig != null && metadataReportConfig.isValid()) {//添加mata元数据存储服务信息添加到map中。
             map.putIfAbsent(METADATA_KEY, REMOTE_METADATA_STORAGE_TYPE);
         }
         //3、如果单独配置了方法，就做如下处理。

@@ -114,20 +114,68 @@ public abstract class Wrapper {
         }
 
         return WRAPPER_MAP.computeIfAbsent(c, Wrapper::makeWrapper);
+        /* 查找rapper缓存，未命中则进行初始化(java8写法 , 类似于以下写法)：
+        Wrapper ret = WRAPPER_MAP.makeWrapper(c);
+        if (ret == null) {
+        // 构建Wrapper
+        ret = makeWrapper(c);
+        WRAPPER_MAP.put(c, ret);
+        }
+        return ret;
+        */
     }
+    /**Dubbo Wrapper 可以认为是一种反射机制。它既可以读写目标实例的字段，也可以调用目标实例的方法。比如
+     https://www.jianshu.com/p/57d53ff17062   Dubbo Wrapper 原理与实例
 
+    可以认为是重写了JDK的反射机制。*/
     private static Wrapper makeWrapper(Class<?> c) {
+        /*isPrimitive() 判定指定的 Class 对象是否表示一个 Java 的基类型。
+        public native boolean isPrimitive()
+        有九个预定义的类，表示八个基本类型和 void。这些类通过 Java 虚拟机创建，具有与其表示的基类型相同的名称，
+        分别为 boolean, byte, char, short, int, long, float, double 和 void。
+        这些对象仅能通过下列公有的、静态的、最终的变量访问，这些对象也是使该方法返回 true 的仅有的类对象。
+
+        那么java中的基类是什么？
+        一般来说我们把父类叫做基类或超类，相信大家都知道在Java中，Object类是所有类的父类（也就是基类），
+        如果在定义一个类时没有使用extends，则这个类直接继承Object类。*/
         if (c.isPrimitive()) {
             throw new IllegalArgumentException("Can not create wrapper for primitive type: " + c);
         }
-
+        /**Wrapper.getWrapper方法是动态生成一个代理类，其中的invokeMethod如下：
+        public Object invokeMethod(Object o, String n, Class[] p, Object[] v)throws java.lang.reflect.InvocationTargetException {
+            com.alibaba.dubbo.demo.provider.DemoServiceImpl w;
+            try {
+                w = ((com.alibaba.dubbo.demo.provider.DemoServiceImpl) $1);
+            } catch (Throwable e) {
+                throw new IllegalArgumentException(e);
+            }
+            try {
+                if ("sayHello".equals($2) && $3.length == 1) {
+                    return ($w) w.sayHello((java.lang.String) $4[0]);
+                }
+            } catch (Throwable e) {
+                throw new java.lang.reflect.InvocationTargetException(e);
+            }
+            throw new com.alibaba.dubbo.common.bytecode.NoSuchMethodException(
+                    "Not found method \"" + $2 + "\" in class com.alibaba.dubbo.demo.provider.DemoServiceImpl.");
+        }
+        这样就执行了实际类的方法。*/
         String name = c.getName();
         ClassLoader cl = ClassUtils.getClassLoader(c);
+        /**
+          ！！！！此步骤很重要！！！牛批class！！
+          获取类加载器
+          以便于将以下动态代理生成的代码类加载进入classloader
+         */
 
         StringBuilder c1 = new StringBuilder("public void setPropertyValue(Object o, String n, Object v){ ");
         StringBuilder c2 = new StringBuilder("public Object getPropertyValue(Object o, String n){ ");
         StringBuilder c3 = new StringBuilder("public Object invokeMethod(Object o, String n, Class[] p, Object[] v) throws " + InvocationTargetException.class.getName() + "{ ");
-
+/*
+        【1】、创建c1，c2，c3三个字符串，用于存储类型转换代码和异常捕捉代码，而后pts用于存储成员变量名和类型，ms用于存储方法描述信息（可理解为方法签名）及Method实例，mns为方法名列表，dmns用于存储“定义在当前类中的方法”的名称。在这里做完了一些初始工作
+        【2】、获取所有public字段，用c1存储条件判断及赋值语句，可以理解为通过c1能够为public字段赋值，而c2是条件判断及返回语句，同样的是得到public字段的值。再用pts存储<字段名，字段类型>。也就是现在能对目标类字段进行操作了，而要操作一些私有字段，是要访问set开头和get开头的方法，同样这些方法也都对应使用c1存set，c2存get，pts存储<属性名，属性类型>
+        【3】、现在到类中的方法，先检查方法中的参数，然后再检查是否有重载的方法。通过c3存储调用目标方法的语句以及方法中可能会抛出的异常，而后用mns集合进行存储方法名，对已经声明的方法存到ms中，未声明但是定义了的方法存在dmns中。
+        【4】、通过ClassGenerator为刚刚生成的代码构建Class类，并通过反射创建对象。ClassGenerator是Dubbo自己封装的，该类的核心是toClass()的重载方法 toClass(ClassLoader, ProtectionDomain)，该方法通过javassist构建Class。*/
         c1.append(name).append(" w; try{ w = ((").append(name).append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
         c2.append(name).append(" w; try{ w = ((").append(name).append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
         c3.append(name).append(" w; try{ w = ((").append(name).append(")$1); }catch(Throwable e){ throw new IllegalArgumentException(e); }");
@@ -139,6 +187,9 @@ public abstract class Wrapper {
 
         // get all public field.
         for (Field f : c.getFields()) {
+            /*反射获取DemoService（所有服务）的属性（公有），若要获取私有属性需要破坏封装性如下：
+                值为 true 则指示反射的对象在使用时应该取消 Java 语言访问检查。值为 false 则指示反射的对象应该实施 Java 语言访问检查。
+                field.setAccessible(true);*/
             String fn = f.getName();
             Class<?> ft = f.getType();
             if (Modifier.isStatic(f.getModifiers()) || Modifier.isTransient(f.getModifiers())) {
