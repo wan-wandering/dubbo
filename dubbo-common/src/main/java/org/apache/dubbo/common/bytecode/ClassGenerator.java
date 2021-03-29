@@ -85,7 +85,7 @@ public final class ClassGenerator {
 
     public static ClassPool getClassPool(ClassLoader loader) {
         if (loader == null) {
-            return ClassPool.getDefault();
+            return ClassPool.getDefault();//默认的类搜索路径
         }
 
         ClassPool pool = POOL_MAP.get(loader);
@@ -346,7 +346,16 @@ public final class ClassGenerator {
             throw new RuntimeException(e.getMessage(), e);
         }
     }
-
+   /** CtClass
+    javassist为每个需要编辑的class都创建了一个CtClass对象，通过对CtClass对象的操作来实现对class的编辑工作。
+    该类方法较多，此处列出需要重点关注的方法：
+            1.    freeze : 冻结一个类，使其不可修改。
+            2.    isFrozen : 判断一个类是否已被冻结。
+            3.    prune : 删除类不必要的属性，以减少内存占用。调用该方法后，许多方法无法将无法正常使用，慎用。
+            4.    defrost : 解冻一个类，使其可以被修改。如果事先知道一个类会被defrost， 则禁止调用 prune 方法。
+            5.    detach : 将该class从ClassPool中删除。
+            6.    writeFile : 根据CtClass生成 .class 文件。
+            7.    toClass : 通过类加载器加载该CtClass。*/
     public void release() {
         if (mCtc != null) {
             mCtc.detach();

@@ -334,6 +334,10 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
             F、demoService 这个服务引用是一个动态代理的类。
         那么小老弟，面试题就来了，请问 Dubbo 提供了哪些动态代理的实现方式？其默认实现是什么呢？
         记住，只有 jdk 和 javassist 的实现方法，没有 CGLIB。其默认实现是 javassist。
+        -------------javassist
+         javassist是一种能够在不影响正常编译的情况下，修改字节码。java作为一种强类型的语言，不通过编译就不能够进行jar包的生成。
+         而有了javaagent技术，就可以在字节码这个层面对类和方法进行修改。
+         同时，也可以把javaagent理解成一种代码注入的方式。但是这种注入比起spring的aop更加的优美。
         */
 
         /**泛化调用

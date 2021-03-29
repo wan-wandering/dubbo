@@ -141,7 +141,8 @@ public abstract class Wrapper {
         if (c.isPrimitive()) {
             throw new IllegalArgumentException("Can not create wrapper for primitive type: " + c);
         }
-        /**Wrapper.getWrapper方法是动态生成一个代理类，其中的invokeMethod如下：
+        /**Wrapper.getWrapper方法是动态生成一个代理类，其中的invokeMethod如下
+         （$1 是传递的第一个参数 $2 是传递的第二个参数）：
         public Object invokeMethod(Object o, String n, Class[] p, Object[] v)throws java.lang.reflect.InvocationTargetException {
             com.alibaba.dubbo.demo.provider.DemoServiceImpl w;
             try {
@@ -189,9 +190,26 @@ public abstract class Wrapper {
         for (Field f : c.getFields()) {
             /*反射获取DemoService（所有服务）的属性（公有），若要获取私有属性需要破坏封装性如下：
                 值为 true 则指示反射的对象在使用时应该取消 Java 语言访问检查。值为 false 则指示反射的对象应该实施 Java 语言访问检查。
-                field.setAccessible(true);*/
+                f.setAccessible(true);*/
             String fn = f.getName();
             Class<?> ft = f.getType();
+            //Modifier.isStatic(f.getModifiers())验证修饰符是否是static修饰
+           /**反射 之 访问修饰符 – getModifiers()
+            如何判断类或变量、方法的修饰符，可以使用Java反射机制中，Field的 getModifiers() 方法返回int类型值表示该字段的修饰符，
+            即这个方法就是返回一个int型的返回值，代表类、成员变量、方法的修饰符。
+            其中，该修饰符是java.lang.reflect.Modifier的静态属性。
+            */
+            /**transient修饰符
+             首先先说一下这个修饰符作用：我们把对象序列化的时候，不希望对类中其中某个属性也进行序列化，
+             那么就可以用这个transient进行修饰了。比如将对象存在磁盘中，就不会将用transient这个修饰符的属性变量也写到磁盘中，
+             比如把变量通过网络传送，那么就不会将这个属性传输过去。这样安全了许多。
+             ---------------------------------------------------------------------------------
+             java.lang.reflect.Modifier的isTransient(mod)方法用于检查整数参数是否包含瞬态修饰符。
+             如果此整数参数表示瞬时类型Modifier，则方法返回true，否则返回false。
+            用法:
+            public static boolean isTransient(int mod)
+            参数：此方法接受整数名称，因为mod代表一组修饰符。
+            返回：如果mod包含瞬时修饰符，则此方法返回true；否则为假。*/
             if (Modifier.isStatic(f.getModifiers()) || Modifier.isTransient(f.getModifiers())) {
                 continue;
             }
@@ -282,6 +300,9 @@ public abstract class Wrapper {
         // make class
         long id = WRAPPER_CLASS_COUNTER.getAndIncrement();
         ClassGenerator cc = ClassGenerator.newInstance(cl);
+        /**      class : org.apache.dubbo.common.bytecode.Wrapper0
+           supperclass : org.apache.dubbo.common.bytecode.Wrapper
+         */
         cc.setClassName((Modifier.isPublic(c.getModifiers()) ? Wrapper.class.getName() : c.getName() + "$sw") + id);
         cc.setSuperClass(Wrapper.class);
 
@@ -304,7 +325,7 @@ public abstract class Wrapper {
         cc.addMethod(c3.toString());
 
         try {
-            Class<?> wc = cc.toClass();
+            Class<?> wc = cc.toClass();/**org.apache.dubbo.common.bytecode.Wrapper0*/
             // setup static field.
             wc.getField("pts").set(null, pts);
             wc.getField("pns").set(null, pts.keySet().toArray(new String[0]));
@@ -320,8 +341,10 @@ public abstract class Wrapper {
         } catch (Throwable e) {
             throw new RuntimeException(e.getMessage(), e);
         } finally {
-            cc.release();
-            ms.clear();
+            /**清理对象所占用内存，所以很多地方都有，一般方法结束或者需要清理出对象占用的空间时使用。
+            JAVA中没有这种系统方法， 一般只有C++ object C++ 等一类的语言才有这个方法。*/
+            cc.release();//释放内存
+            ms.clear();//清空列表
             mns.clear();
             dmns.clear();
         }

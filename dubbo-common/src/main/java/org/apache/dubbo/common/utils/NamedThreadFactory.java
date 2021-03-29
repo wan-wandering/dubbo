@@ -24,14 +24,15 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class NamedThreadFactory implements ThreadFactory {
 
+    //前缀
     protected static final AtomicInteger POOL_SEQ = new AtomicInteger(1);
 
     protected final AtomicInteger mThreadNum = new AtomicInteger(1);
-
+    /**线程前缀递增计数器*/
     protected final String mPrefix;
-
+    /**线程前缀*/
     protected final boolean mDaemon;
-
+    /**是否是精灵线程（守护线程）*/
     protected final ThreadGroup mGroup;
 
     public NamedThreadFactory() {
@@ -46,6 +47,10 @@ public class NamedThreadFactory implements ThreadFactory {
         mPrefix = prefix + "-thread-";
         mDaemon = daemon;
         SecurityManager s = System.getSecurityManager();
+        //安全管理器的应用场合，一般用在测试未知的且认为有恶意的程序
+        /*当运行未知的Java程序的时候，该程序可能有恶意代码（删除系统文件、重启系统等），为了防止运行恶意代码对系统产生影响，
+            需要对运行的代码的权限进行控制，这时候就要启用Java安全管理器。
+        默认的安全管理器配置文件是 $JAVA_HOME/jre/lib/security/java.policy，即当未指定配置文件时，将会使用该配置*/
         mGroup = (s == null) ? Thread.currentThread().getThreadGroup() : s.getThreadGroup();
     }
 
@@ -54,6 +59,7 @@ public class NamedThreadFactory implements ThreadFactory {
         String name = mPrefix + mThreadNum.getAndIncrement();
         Thread ret = new Thread(mGroup, runnable, name, 0);
         ret.setDaemon(mDaemon);
+        /**是否是精灵线程（守护线程/后台线程）*/
         return ret;
     }
 

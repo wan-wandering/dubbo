@@ -142,13 +142,27 @@ public class ExtensionLoader<T> {
 
     private ExtensionLoader(Class<?> type) {
         this.type = type;
+        // ExtensionFactory objectFactory;
+        // 有四个实现类：AdaptiveExtensionFactory MyExtensionFactory SpiExtensionFactory SpringExtensionFactory
+        // 如果扩展类型是ExtensionFactory,那么则设置为null
+        // 这里通过getAdaptiveExtension方法获取一个运行时自适应的扩展类型(每个Extension只能有一个@Adaptive类型的实现，如果没有dubbo会动态生成一个类)
         objectFactory = (type == ExtensionFactory.class ? null : ExtensionLoader.getExtensionLoader(ExtensionFactory.class).getAdaptiveExtension());
+       /* 默认的ExtensionFactory实现中，AdaptiveExtensionFactotry被@Adaptive注解注释，
+          也就是说它就是ExtensionFactory对应的自适应扩展实现(每个扩展点最多只能有一个自适应实现，
+                如果所有实现中没有被@Adaptive注释的，那么dubbo会动态生成一个自适应实现类)，
+        也就是说，所有对ExtensionFactory调用的地方，实际上调用的都是AdpativeExtensionFactory*/
     }
 
     private static <T> boolean withExtensionAnnotation(Class<T> type) {
         return type.isAnnotationPresent(SPI.class);
     }
 
+    /*该方法需要一个Class类型的参数，该参数表示希望加载的扩展点类型，
+      该参数必须是接口，且该接口必须被@SPI注解注释，否则拒绝处理。
+      检查通过之后首先会检查ExtensionLoader缓存中是否已经存在该扩展对应的ExtensionLoader，
+      如果有则直接返回，否则创建一个新的ExtensionLoader负责加载该扩展实现，
+      同时将其缓存起来。可以看到对于每一个扩展，dubbo中只会有一个对应的ExtensionLoader实例。
+    */
     @SuppressWarnings("unchecked")
     public static <T> ExtensionLoader<T> getExtensionLoader(Class<T> type) {
         if (type == null) {
@@ -157,14 +171,16 @@ public class ExtensionLoader<T> {
         if (!type.isInterface()) {
             throw new IllegalArgumentException("Extension type (" + type + ") is not an interface!");
         }
+        // 只接受使用@SPI注解注释的接口类型
         if (!withExtensionAnnotation(type)) {
             throw new IllegalArgumentException("Extension type (" + type +
                     ") is not an extension, because it is NOT annotated with @" + SPI.class.getSimpleName() + "!");
         }
-
+        // 先从静态缓存中获取对应的ExtensionLoader实例
         ExtensionLoader<T> loader = (ExtensionLoader<T>) EXTENSION_LOADERS.get(type);
         if (loader == null) {
             EXTENSION_LOADERS.putIfAbsent(type, new ExtensionLoader<T>(type));
+            // 为Extension类型创建ExtensionLoader实例，并放入静态缓存
             loader = (ExtensionLoader<T>) EXTENSION_LOADERS.get(type);
         }
         return loader;
@@ -586,6 +602,7 @@ public class ExtensionLoader<T> {
                 if (instance == null) {
                     try {
                         instance = createAdaptiveExtension();
+                        //#如果无缓存则创建
                         cachedAdaptiveInstance.set(instance);
                     } catch (Throwable t) {
                         createAdaptiveInstanceError = t;
@@ -1016,7 +1033,9 @@ public class ExtensionLoader<T> {
     @SuppressWarnings("unchecked")
     private T createAdaptiveExtension() {
         try {
+            //# 扩展点注入
             return injectExtension((T) getAdaptiveExtensionClass().newInstance());
+            //#获取AdaptiveExtensionClass
         } catch (Exception e) {
             throw new IllegalStateException("Can't create adaptive extension " + type + ", cause: " + e.getMessage(), e);
         }
@@ -1024,17 +1043,38 @@ public class ExtensionLoader<T> {
 
     private Class<?> getAdaptiveExtensionClass() {
         getExtensionClasses();
+        //# 加载当前扩展所有实现，看是否有实现被标注为@Adaptive
         if (cachedAdaptiveClass != null) {
             return cachedAdaptiveClass;
         }
         return cachedAdaptiveClass = createAdaptiveExtensionClass();
+        //#如果没有实现被标注为@Adaptive，则动态创建一个Adaptive实现类
     }
 
     private Class<?> createAdaptiveExtensionClass() {
+        /*
+        *   package org.apache.spi;
+            import org.apache.dubbo.common.extension.ExtensionLoader;
+            public class Robot$Adaptive implements org.apache.spi.Robot {
+                public void sayHello()  {
+                    throw new UnsupportedOperationException("The method public abstract void org.apache.spi.Robot.sayHello() of interface org.apache.spi.Robot is not adaptive method!");
+                }
+                public void sayHello(org.apache.dubbo.common.URL arg0)  {
+                    if (arg0 == null) throw new IllegalArgumentException("url == null");
+                    org.apache.dubbo.common.URL url = arg0;
+                    String extName = url.getParameter("robot");
+                    if(extName == null) throw new IllegalStateException("Failed to get extension (org.apache.spi.Robot) name from url (" + url.toString() + ") use keys([robot])");
+                    org.apache.spi.Robot extension = (org.apache.spi.Robot)ExtensionLoader.getExtensionLoader(org.apache.spi.Robot.class).getExtension(extName);
+                    extension.sayHello(arg0);
+                }
+            }
+        * */
         String code = new AdaptiveClassCodeGenerator(type, cachedDefaultName).generate();
+        //createAdaptiveExtensionClassCode() #借助AdaptiveClassCodeGenerator动态生成实现类java代码
         ClassLoader classLoader = findClassLoader();
         org.apache.dubbo.common.compiler.Compiler compiler = ExtensionLoader.getExtensionLoader(org.apache.dubbo.common.compiler.Compiler.class).getAdaptiveExtension();
         return compiler.compile(code, classLoader);
+        //#动态编译java代码，加载类并实例化
     }
 
     @Override

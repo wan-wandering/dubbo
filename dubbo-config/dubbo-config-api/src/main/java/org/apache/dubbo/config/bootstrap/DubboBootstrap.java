@@ -143,14 +143,55 @@ public class DubboBootstrap extends GenericEventListener {
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
     private static volatile DubboBootstrap instance;
-
+    /**
+     一旦一个共享变量（类的成员变量、类的静态成员变量）被volatile修饰之后，那么就具备了两层语义：
+     　　1）保证了不同线程对这个变量进行操作时的可见性，即一个线程修改了某个变量的值，这新值对其他线程来说是立即可见的。
+     　　2）禁止进行指令重排序。
+     ---可见性---
+　　  对于可见性，Java提供了volatile关键字来保证可见性。
+        当一个共享变量被volatile修饰时，它会保证修改的值会立即被更新到主存，当有其他线程需要读取时，它会去内存中读取新值。
+        而普通的共享变量不能保证可见性，因为普通共享变量被修改之后，什么时候被写入主存是不确定的，当其他线程去读取时，此时内存中可能还是原来的旧值，因此无法保证可见性。
+        另外，通过synchronized和Lock也能够保证可见性，synchronized和Lock能保证同一时刻只有一个线程获取锁然后执行同步代码，并且在释放锁之前会将对变量的修改刷新到主存当中。因此可以保证可见性。*/
     private final AtomicBoolean awaited = new AtomicBoolean(false);
 
     private final Lock lock = new ReentrantLock();
 
+    /**浅谈Synchronized:
+            synchronized是Java的一个关键字,也就是Java语言内置的特性,如果一个代码块被synchronized修饰了,当一个线程获取了对应的锁,执行代码块时,其他线程
+            便只能一直等待,等待获取锁的线程释放锁,而获取锁的线程释放锁会有三种情况:
+            　　1).获取锁的线程执行完该代码块,然后线程释放对锁的占有;
+　　            2).线程执行发生异常,此时JVM会让线程自动释放锁;
+　　            3).调用wait方法,在等待的时候立即释放锁,方便其他的线程使用锁.
+     Lock的特性:
+            　　1).Lock不是Java语言内置的;
+　　            2).synchronized是在JVM层面上实现的,如果代码执行出现异常,JVM会自动释放锁,但是Lock不行,要保证锁一定会被释放,就必须将unLock放到finally{}中(手动释放);
+　　            3).在资源竞争不是很激烈的情况下,Synchronized的性能要优于ReetarntLock,但是在很激烈的情况下,synchronized的性能会下降几十倍;
+                    --重入锁 ReentrantLock 主要特点：
+                        1.容易控制加锁的粒度。lock unlock
+                        2.等待锁的过程当中可以响应中断，lockInterruptibly
+                        3.可以有限时间内尝试获取锁， tryLock
+                        4.公平锁，尽量保证各个线程获取锁的公平
+                        5.使用 Condition 对线程进行等待和唤醒
+                    --重入锁的基本使用 lock() 和 unlock() 分别加锁和释放锁，必须一一对应
+                    --重入锁可以响应线程的 interupt() 中断,并且释放锁。可响应中断的锁需要使用 lockInterruptibly()
+                    --使用 tryLock(long timeout, TimeUnit unit) 可以尝试获取锁，如果 timeout 时间内获取不到则越过临界区，放弃获取锁。
+                    --使用 tryLock() 尝试获取则不等待
+                    --通常线程获取锁是不公平的，系统调度会倾向于已经获得锁的线程，这样效率更高。
+                    --重入锁提供了公平锁，new ReentrantLock(true)
+     　　       4).ReentrantLock增加了锁:
+            　　　　a. void lock(); // 无条件的锁;
+　　　　            b. void lockInterruptibly throws InterruptedException;//可中断的锁;
+    解释:　　使用ReentrantLock如果获取了锁立即返回,如果没有获取锁,当前线程处于休眠状态,直到获得锁或者当前线程可以被别的线程中断去做其他的事情;但是如果是synchronized的话,如果没有获取到锁,则会一直等待下去;
+　　　　            c. boolean tryLock();//如果获取了锁立即返回true,如果别的线程正持有,立即返回false,不会等待;
+　　　　            d. boolean tryLock(long timeout,TimeUnit unit);//如果获取了锁立即返回true,如果别的线程正持有锁,会等待参数给的时间,在等待的过程中,如果获取锁,则返回true,如果等待超时,返回false;
+    Condition的特性:
+            　　　　1.Condition中的await()方法相当于Object的wait()方法，Condition中的signal()方法相当于Object的notify()方法，Condition中的signalAll()相当于Object的notifyAll()方法。不同的是，Object中的这些方法是和同步锁捆绑使用的；而Condition是需要与互斥锁/共享锁捆绑使用的。
+            　　　　2.Condition它更强大的地方在于：能够更加精细的控制多线程的休眠与唤醒。对于同一个锁，我们可以创建多个Condition，在不同的情况下使用不同的Condition。
+            　　　　例如，假如多线程读/写同一个缓冲区：当向缓冲区中写入数据之后，唤醒"读线程"；当从缓冲区读出数据之后，唤醒"写线程"；并且当缓冲区满的时候，"写线程"需要等待；当缓冲区为空时，"读线程"需要等待。
+            　　　　  如果采用Object类中的wait(), notify(), notifyAll()实现该缓冲区，当向缓冲区写入数据之后需要唤醒"读线程"时，不可能通过notify()或notifyAll()明确的指定唤醒"读线程"，而只能通过notifyAll唤醒所有线程(但是notifyAll无法区分唤醒的线程是读线程，还是写线程)。  但是，通过Condition，就能明确的指定唤醒读线程。*/
     private final Condition condition = lock.newCondition();
 
-    private final Lock destroyLock = new ReentrantLock();
+    private final Lock destroyLock =  new ReentrantLock();
 
     private final ExecutorService executorService = newSingleThreadExecutor();
 
@@ -192,6 +233,7 @@ public class DubboBootstrap extends GenericEventListener {
      * See {@link ApplicationModel} and {@link ExtensionLoader} for why DubboBootstrap is designed to be singleton.
      */
     public static DubboBootstrap getInstance() {
+        //双重检查 单例设计模式（经典）
         if (instance == null) {
             synchronized (DubboBootstrap.class) {
                 if (instance == null) {
@@ -991,7 +1033,7 @@ public class DubboBootstrap extends GenericEventListener {
     public DubboBootstrap awaitFinish() throws Exception {
         logger.info(NAME + " waiting services exporting / referring ...");
         if (exportAsync && asyncExportingFutures.size() > 0) {
-            CompletableFuture future = CompletableFuture.allOf(asyncExportingFutures.toArray(new CompletableFuture[0]));
+                CompletableFuture future = CompletableFuture.allOf(asyncExportingFutures.toArray(new CompletableFuture[0]));
             future.get();
         }
         if (referAsync && asyncReferringFutures.size() > 0) {
@@ -1103,7 +1145,7 @@ public class DubboBootstrap extends GenericEventListener {
     }
 
     private void exportServices() {
-        /**此方法最需要关注的是暴露服务发布方法：-----sc.export();------*/
+        /**此方法最需要关注的是暴露服务发布方法：-----sc.export();默认是同步暴露，可以调用bootstrap.exportAsync()改为异步------*/
         /*从配置管理器中获取到需要发布的服务列表，然后循环进行每一个服务发布，dubbo的每一个配置
         在触发完成后都会将其添加到configManager的configsCache的Map属性中，当然初始化的过程也是使用
         spring的一些基础组件来实现的，因此我们能够在这里通过configManager获取到我们所需要发布的服务列

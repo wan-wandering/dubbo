@@ -36,6 +36,7 @@ public class AdaptiveExtensionFactory implements ExtensionFactory {
         ExtensionLoader<ExtensionFactory> loader = ExtensionLoader.getExtensionLoader(ExtensionFactory.class);
         List<ExtensionFactory> list = new ArrayList<ExtensionFactory>();
         for (String name : loader.getSupportedExtensions()) {
+            // 将所有ExtensionFactory实现保存起来
             list.add(loader.getExtension(name));
         }
         factories = Collections.unmodifiableList(list);
@@ -43,6 +44,8 @@ public class AdaptiveExtensionFactory implements ExtensionFactory {
 
     @Override
     public <T> T getExtension(Class<T> type, String name) {
+        // 依次遍历各个ExtensionFactory实现的getExtension方法，一旦获取到Extension即返回
+        // 如果遍历完所有的ExtensionFactory实现均无法找到Extension,则返回null
         for (ExtensionFactory factory : factories) {
             T extension = factory.getExtension(type, name);
             if (extension != null) {

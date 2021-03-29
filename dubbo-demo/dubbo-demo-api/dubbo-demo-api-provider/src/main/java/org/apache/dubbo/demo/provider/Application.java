@@ -54,8 +54,10 @@ public class Application {
          在配置了应用信息ApplicationConfig， 最后将这些信息前部注册进DubboBootstrap中，
          DubboBootstrap是dubbo最新的启动类。
          */
+        //bootstrap.exportAsync()-->异步暴露方法，默认是同步暴露
         bootstrap.application(new ApplicationConfig("dubbo-demo-api-provider"))
-                .registry(new RegistryConfig("zookeeper://127.0.0.1:2181"))
+                //.registry(new RegistryConfig("zookeeper://127.0.0.1:2181"))
+                .registry(new RegistryConfig("nacos://127.0.0.1:8848"))
                 //registry方法就是将注册中心信息放入configManager中
                 .service(service)
                 //service方法是将提供者信息放入configManager
