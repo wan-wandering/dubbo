@@ -24,6 +24,12 @@ import java.io.IOException;
 
 @SPI
 public interface Codec2 {
+    /*该接口也是一个扩展接口，encode()、decode() 被 @Adaptive 注解修饰，也就会生成适配器类，其中会根据 URL 中的 codec 值确定具体的扩展实现类。
+
+    DecodeResult 这个枚举是在处理 TCP 传输时粘包和拆包使用的，例如，当前能读取到的数据不足以构成一个消息时，就会使用 NEED_MORE_INPUT 枚举。
+            ————————————————
+    版权声明：本文为CSDN博主「公众号-JavaEdge」的原创文章，遵循CC 4.0 BY-SA版权协议，转载请附上原文出处链接及本声明。
+    原文链接：https://blog.csdn.net/qq_33589510/article/details/109080278*/
 
     @Adaptive({Constants.CODEC_KEY})
     void encode(Channel channel, ChannelBuffer buffer, Object message) throws IOException;

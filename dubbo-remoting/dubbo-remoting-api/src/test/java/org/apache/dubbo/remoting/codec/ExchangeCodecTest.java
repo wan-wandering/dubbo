@@ -50,13 +50,13 @@ import static org.junit.jupiter.api.Assertions.fail;
  *         byte 16
  *         0-1 magic code
  *         2 flag
- *         8 - 1-request/0-response
- *         7 - two way
- *         6 - heartbeat
- *         1-5 serialization id
+     *         8 - 1-request/0-response
+     *         7 - two way
+     *         6 - heartbeat
+     *         1-5 serialization id
  *         3 status
- *         20 ok
- *         90 error?
+     *         20 ok
+     *         90 error?
  *         4-11 id (long)
  *         12 -15 datalength
  */

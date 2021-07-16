@@ -71,7 +71,7 @@ public class NettyServer extends AbstractServer implements RemotingServer {
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
 
-    public NettyServer(URL url, ChannelHandler handler) throws RemotingException {
+    public  NettyServer(URL url, ChannelHandler handler) throws RemotingException {
         // you can customize name and type of client thread pool by THREAD_NAME_KEY and THREADPOOL_KEY in CommonConstants.
         // the handler will be wrapped: MultiMessageHandler->HeartbeatHandler->handler
         super(ExecutorUtil.setThreadName(url, SERVER_THREAD_POOL_NAME), ChannelHandlers.wrap(handler, url));
@@ -85,23 +85,30 @@ public class NettyServer extends AbstractServer implements RemotingServer {
     @Override
     protected void doOpen() throws Throwable {
         bootstrap = new ServerBootstrap();
-
+        // bossGroup一个线程
         bossGroup = NettyEventLoopFactory.eventLoopGroup(1, "NettyServerBoss");
+        // workerGroup线程数取的CPU核数+1与32的最小值
         workerGroup = NettyEventLoopFactory.eventLoopGroup(
                 getUrl().getPositiveParameter(IO_THREADS_KEY, Constants.DEFAULT_IO_THREADS),
                 "NettyServerWorker");
-
+    // ***1、此处将NettyServer封装进NettyServerHandler中，实现了netty和dubbo的连接
         final NettyServerHandler nettyServerHandler = new NettyServerHandler(getUrl(), this);
         channels = nettyServerHandler.getChannels();
-
+    // netty封装（server范式）
+        /*bootstrap,serverBootstrap 是 引导，一个 Netty程序通常是由 bootstrap开始，
+        主要作用是配置整个 Netty程序，串联各个组件，Netty中  bootstrap是客户端引导，serverbootstrap是 服务端引导*/
         bootstrap.group(bossGroup, workerGroup)
+                ///提供eventLoop的线程池
                 .channel(NettyEventLoopFactory.serverSocketChannelClass())
+                //设置通道实现，根据传入的类反射生成
                 .option(ChannelOption.SO_REUSEADDR, Boolean.TRUE)
+                //socket 提供相关配置
                 .childOption(ChannelOption.TCP_NODELAY, Boolean.TRUE)
                 .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) throws Exception {
+                        //用来设置业务处理类
                         // FIXME: should we use getTimeout()?
                         int idleTimeout = UrlUtils.getIdleTimeout(getUrl());
                         NettyCodecAdapter adapter = new NettyCodecAdapter(getCodec(), getUrl(), NettyServer.this);
@@ -116,6 +123,7 @@ public class NettyServer extends AbstractServer implements RemotingServer {
                                 .addLast("handler", nettyServerHandler);
                     }
                 });
+        // 绑定IP和端口，此处用到的就是AbstractServer中的bindAddress变量
         // bind
         ChannelFuture channelFuture = bootstrap.bind(getBindAddress());
         channelFuture.syncUninterruptibly();

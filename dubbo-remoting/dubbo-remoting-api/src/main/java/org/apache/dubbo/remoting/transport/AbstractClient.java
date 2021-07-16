@@ -55,10 +55,11 @@ public abstract class AbstractClient extends AbstractEndpoint implements Client 
         super(url, handler);
 
         needReconnect = url.getParameter(Constants.SEND_RECONNECT_KEY, false);
-
+        // 1、初始化客户端线程池
         initExecutor(url);
 
         try {
+            // 2、创建客户端的Bootstrap
             doOpen();
         } catch (Throwable t) {
             close();
@@ -69,6 +70,7 @@ public abstract class AbstractClient extends AbstractEndpoint implements Client 
 
         try {
             // connect.
+            // 3、连接Netty服务端
             connect();
             if (logger.isInfoEnabled()) {
                 logger.info("Start " + getClass().getSimpleName() + " " + NetUtils.getLocalAddress() + " connect to the server " + getRemoteAddress());
@@ -90,6 +92,8 @@ public abstract class AbstractClient extends AbstractEndpoint implements Client 
     }
 
     private void initExecutor(URL url) {
+        //客户端默认是Cached(DEFAULT_CLIENT_THREADPOOL)类型，
+        // 所以在调用executorRepository.createExecutorIfAbsent(url)时会进入CachedThreadPool中
         url = ExecutorUtil.setThreadName(url, CLIENT_THREAD_POOL_NAME);
         url = url.addParameterIfAbsent(THREADPOOL_KEY, DEFAULT_CLIENT_THREADPOOL);
         executor = executorRepository.createExecutorIfAbsent(url);

@@ -92,6 +92,7 @@ public class NettyClient extends AbstractClient {
         final NettyClientHandler nettyClientHandler = new NettyClientHandler(getUrl(), this);
         bootstrap = new Bootstrap();
         bootstrap.group(NIO_EVENT_LOOP_GROUP)
+                //提供eventLoop的线程池
                 .option(ChannelOption.SO_KEEPALIVE, true)
                 .option(ChannelOption.TCP_NODELAY, true)
                 .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
@@ -113,6 +114,8 @@ public class NettyClient extends AbstractClient {
                 ch.pipeline()//.addLast("logging",new LoggingHandler(LogLevel.INFO))//for debug
                         .addLast("decoder", adapter.getDecoder())
                         .addLast("encoder", adapter.getEncoder())
+                        //服务端添加IdleStateHandler心跳检测处理器，并添加自定义处理Handler类实现userEventTriggered()方法作为超时事件的逻辑处理；
+                        //设定IdleStateHandler心跳检测每**秒进行一次读检测，如果规则时间内ChannelRead()方法未被调用则触发一次userEventTrigger()方法
                         .addLast("client-idle-handler", new IdleStateHandler(heartbeatInterval, 0, 0, MILLISECONDS))
                         .addLast("handler", nettyClientHandler);
 

@@ -40,6 +40,10 @@ import org.apache.dubbo.remoting.transport.ExceedPayloadLimitException;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * ExchangeCodec.
@@ -208,13 +212,18 @@ public class ExchangeCodec extends TelnetCodec {
     }
 
     protected void encodeRequest(Channel channel, ChannelBuffer buffer, Request req) throws IOException {
+        //序列化方式
+        //也是根据SPI扩展来获取，url中没指定的话默认使用hessian2
         Serialization serialization = getSerialization(channel);
         // header.
+        //长度为16字节的数组，协议头
         byte[] header = new byte[HEADER_LENGTH];
         // set magic number.
+        //魔数0xdabb
         Bytes.short2bytes(MAGIC, header);
 
         // set request and serialization flag.
+        //序列化方式
         header[2] = (byte) (FLAG_REQUEST | serialization.getContentTypeId());
 
         if (req.isTwoWay()) {
@@ -256,17 +265,24 @@ public class ExchangeCodec extends TelnetCodec {
     protected void encodeResponse(Channel channel, ChannelBuffer buffer, Response res) throws IOException {
         int savedWriteIndex = buffer.writerIndex();
         try {
+            //序列化方式
+            //也是根据SPI扩展来获取，url中没指定的话默认使用hessian2
             Serialization serialization = getSerialization(channel);
             // header.
+            //长度为16字节的数组，协议头
             byte[] header = new byte[HEADER_LENGTH];
             // set magic number.
+            //魔数0xdabb
             Bytes.short2bytes(MAGIC, header);
             // set request and serialization flag.
+            //序列化方式
             header[2] = serialization.getContentTypeId();
+            //心跳消息还是正常消息
             if (res.isHeartbeat()) {
                 header[2] |= FLAG_EVENT;
             }
             // set response status.
+            //响应状态
             byte status = res.getStatus();
             header[3] = status;
             // set request id.
@@ -450,5 +466,60 @@ public class ExchangeCodec extends TelnetCodec {
         encodeResponseData(out, data);
     }
 
+    public static void main(String[] args) throws InterruptedException {
+        AwaitSignal awaitSignal=new AwaitSignal(5);
+        //创建了3个休息室
+        Condition a=awaitSignal.newCondition();
+        Condition b=awaitSignal.newCondition();
+        Condition c=awaitSignal.newCondition();
+
+        new Thread(()->{
+            awaitSignal.print("a",a,b);//该线程打印a,打印之前首先进入休息室a等待，当它执行完成后要唤醒b休息室的线程
+
+        }).start();
+
+        new Thread(()->{
+            awaitSignal.print("b",b,c);//该线程打印b,打印之前首先进入休息室b等待，当它执行完成后要唤醒的c休息的线程
+        }).start();
+        new Thread(()->{
+            awaitSignal.print("c",c,a);//该线程打印c,打印之前首先进入休息室b等待，当它执行完成后要唤醒的a休息室的线程
+
+        }).start();
+
+        //由于这三个线程一启动都进入了休息室等待，因此需要一个线程先唤醒a休息室中的线程
+        TimeUnit.SECONDS.sleep(1);
+        awaitSignal.lock();//获取锁
+        try{
+            System.out.println("由主线程开始唤醒a线程后，，，，开始。。。。。。。。");
+            a.signal();//唤醒a休息室的线程
+        }finally {
+            awaitSignal.unlock();//释放锁
+        }
+    }
+}
+
+class AwaitSignal extends ReentrantLock{
+    private int loopNumber;
+
+    public AwaitSignal(int loopNumber) {
+        this.loopNumber = loopNumber;
+    }
+
+    //写一个print，由三个线程调用，当不满足条件时进入格各自的休息室等待
+    //参数1：打印的内容，参数2，进入哪一间休息室,参数3，表示下一件休息室
+    public void print(String str,Condition current,Condition next){
+        for(int i=0;i<loopNumber;i++){
+            lock();//继承了ReentrantLock，可以省略前面的this
+            try{
+                current.await();//获得锁之后，先进入休息室等待被唤醒时表示可以继续运行执行它的打印了
+                System.out.print(str);
+                next.signal();//打印完成之后去唤醒下一件休息室的线程
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } finally {
+                unlock();
+            }
+        }
+    }
 
 }
