@@ -319,16 +319,7 @@ public class Sorts {
     private static volatile int start = 0;
     private static final Integer number = 10;
 
-    public static void main(String[] args) throws InterruptedException {
-        int[] a = {5,7,4,8,2,1,6};
-        //insertion(a);
-        quickSort(a,0, 6);
-        //bubble(a);
-        System.out.println(JSON.toJSONString(a));
-        //ThreadIncre();
-        //SumRead();
 
-    }
     private static void ThreadIncre() throws InterruptedException {
         Lock lock = new ReentrantLock();
 
@@ -361,6 +352,56 @@ public class Sorts {
         //countDownLatch.await();
         System.out.println(start);
     }
+
+    public static int[] arrayMerge(int[] a, int[] b) {
+        int[] am = new int[a.length + b.length];
+        int ai = 0;
+        int bj = 0;
+
+        while ((ai<a.length) && (bj<b.length)) {
+            if(a[ai] < b[bj]) {
+                am[ai + bj] = a[ai];
+                ai++;
+            } else {
+                am[ai + bj] = b[bj];
+                bj++;
+            }
+        }
+
+        while (ai < a.length) {
+            am[ai + bj] = a[ai];
+            ai++;
+        }
+
+        while (bj < b.length) {
+            am[ai + bj] = b[bj];
+            bj++;
+        }
+
+        return am;
+
+    }
+
+    public static void main(String[] args) {
+        int[] a = {0,1,2,3,4,5,6,6};
+        int[] b = {1,2,3,4,5,6,7,8,9};
+        int[] am = new int[a.length + b.length];
+        am = arrayMerge(a, b);
+        for (int i=0;i < am.length;i++) {
+            System.out.print(am[i] + " ");
+        }
+    }
+   /* public static void main(String[] args) throws InterruptedException {
+        int[] a = {5,7,4,8,2,1,6};
+        //insertion(a);
+        quickSort(a,0, 6);
+        //bubble(a);
+        System.out.println(JSON.toJSONString(a));
+        //ThreadIncre();
+        //SumRead();
+
+    }*/
+
 
 
 }
